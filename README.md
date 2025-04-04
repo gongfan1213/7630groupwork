@@ -5,6 +5,10 @@ https://wiki.ima.qq.com/knowledge-base-share?shareId=7bb88f36939c37348360155ea53
 
 # 项目中不相关的内容不可以写
 
+## 没学过LSA
+![image](https://github.com/user-attachments/assets/77c8410d-b64c-4cd9-9632-669dbb456c86)
+
+
 ![image](https://github.com/user-attachments/assets/e53162ab-add6-423e-a6e4-68143d91ae50)
 
 
