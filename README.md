@@ -5,6 +5,12 @@ https://wiki.ima.qq.com/knowledge-base-share?shareId=7bb88f36939c37348360155ea53
 
 # 项目中不相关的内容不可以写
 
+![image](https://github.com/user-attachments/assets/e53162ab-add6-423e-a6e4-68143d91ae50)
+
+
+![image](https://github.com/user-attachments/assets/086a7776-d1d7-4e15-8832-52e6e9266244)
+
+
 根据《01_course_outline.pdf》中明确的开发项目要求，以下是核心内容：
 
 开发项目核心要求（严格依据文档描述）
