@@ -486,5 +486,6 @@ Some weights of BertForSequenceClassification were not initialized from the mode
 You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
 ```
 
+![image](https://github.com/user-attachments/assets/5c0520fa-fe7d-4e50-9270-1ee7dc156f48)
 
 
