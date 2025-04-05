@@ -2248,3 +2248,343 @@ Generated 24 association rules (min_threshold=0.7)
 
 # 基于关联规则的挖掘系统
 
+```js
+class AdaptedRecommender:
+    def __init__(self, rules_df, news_df, min_lift=1.1):
+        self.news_df = news_df
+        self.min_lift = min_lift
+        self.rules = self._preprocess_rules(rules_df)
+        self.feature_index = self._build_feature_index()
+
+    def _preprocess_rules(self, rules):
+        """规则预处理方法补全"""
+        # 过滤有效规则
+        valid_rules = rules[
+            (rules['lift'] >= self.min_lift) &
+            (rules['consequents'].apply(len) > 0)
+        ].copy()
+        
+        # 转换规则格式
+        valid_rules['antecedents'] = valid_rules['antecedents'].apply(frozenset)
+        valid_rules['consequents'] = valid_rules['consequents'].apply(frozenset)
+        return valid_rules.sort_values('lift', ascending=False)
+
+    def _build_feature_index(self):
+        """基于现有字段构建特征索引（修复版）"""
+        index = defaultdict(list)
+        for idx, row in self.news_df.iterrows():
+            try:
+                # 从text字段提取前5个非停用词
+                features = {
+                    f"category={row['category']}",
+                    f"sentiment={row['sentiment_label']}"
+                }
+                
+                # 处理text字段
+                text_words = [w for w in str(row['text']).split() if len(w) > 3][:5]
+                features.update({f"word={w.lower()}" for w in text_words})
+                
+                # 处理entity_sentiments字段
+                if pd.notna(row['entity_sentiments']) and isinstance(row['entity_sentiments'], dict):
+                    features.update({f"entity={ent}" for ent in row['entity_sentiments'].keys()})
+                
+                # 索引特征
+                for feature in features:
+                    index[feature].append(idx)
+            except Exception as e:
+                print(f"处理索引{idx}时出错：{str(e)}")
+        return index
+
+    def get_recommendations(self, target_idx, top_n=5):
+        """修复后的推荐方法"""
+        try:
+            target_news = self.news_df.loc[target_idx]
+            features = self._get_news_features(target_news)
+            
+            # 查找关联新闻
+            related_ids = set()
+            for feature in features:
+                related_ids.update(self.feature_index.get(feature, []))
+            related_ids.discard(target_idx)
+            
+            # 计算匹配度
+            candidates = self.news_df.loc[list(related_ids)]
+            candidates['match_score'] = candidates.apply(
+                lambda x: self._calculate_match_score(features, x), 
+                axis=1
+            )
+            
+            return candidates.nlargest(top_n, 'match_score')[['text', 'category', 'match_score']]
+        except KeyError:
+            print(f"索引{target_idx}不存在")
+            return pd.DataFrame()
+
+    def _get_news_features(self, news_row):
+        """特征提取方法（增加异常处理）"""
+        try:
+            features = {
+                f"category={news_row['category']}",
+                f"sentiment={news_row['sentiment_label']}"
+            }
+            
+            # 处理text字段
+            text_words = [w for w in str(news_row['text']).split() if len(w) > 3][:5]
+            features.update({f"word={w.lower()}" for w in text_words})
+            
+            # 处理entity_sentiments
+            if pd.notna(news_row['entity_sentiments']) and isinstance(news_row['entity_sentiments'], dict):
+                features.update({f"entity={ent}" for ent in news_row['entity_sentiments'].keys()})
+                
+            return features
+        except:
+            return set()
+
+    def _calculate_match_score(self, target_features, candidate_row):
+        """基于规则计算匹配分数"""
+        candidate_features = self._get_news_features(candidate_row)
+        score = 0
+        
+        for _, rule in self.rules.iterrows():
+            if rule['antecedents'].issubset(target_features) and not rule['consequents'].isdisjoint(candidate_features):
+                score += rule['lift']
+        
+        return score
+
+# 初始化验证
+try:
+    recommender = AdaptedRecommender(rules, df)
+    print("推荐系统初始化成功！")
+except Exception as e:
+    print(f"初始化失败：{str(e)}")
+```
+
+
+```js
+# Initialize recommender system (successful)
+recommender = AdaptedRecommender(rules, df, min_lift=1.0)  # Lower lift threshold to ensure rule availability
+
+# Validate recommendation process
+def test_recommendation_system(test_index=0):
+    try:
+        # Get test news
+        test_news = df.iloc[test_index]
+        print(f"\n=== Test News {test_index} ===")
+        print(f"[{test_news['category']}] {test_news['text'][:50]}...")
+        print(f"Sentiment Label: {test_news['sentiment_label']}")
+        print(f"Entity Count: {len(test_news['entity_sentiments']) if isinstance(test_news['entity_sentiments'], dict) else 0}")
+
+        # Generate recommendations
+        recs = recommender.get_recommendations(test_index)
+        
+        # Display results
+        if recs.empty:
+            print("\n⚠️ No recommendations found. Possible reasons:")
+            print("1. No matching association rules")
+            print("2. Feature index not built correctly")
+            print("3. Data field format anomalies")
+        else:
+            print("\nRecommendation Results:")
+            for idx, (_, row) in enumerate(recs.iterrows(), 1):
+                print(f"{idx}. [{row['category']}] {row['text'][:50]}...")
+                print(f"   Match Score: {row['match_score']:.2f}")
+
+        # Diagnostic information
+        print("\n=== System Diagnostics ===")
+        # Check feature index
+        test_features = recommender._get_news_features(test_news)
+        print("Target News Features:", test_features)
+        
+        # Check association rules
+        print("\nValid Rules Count:", len(recommender.rules))
+        if not recommender.rules.empty:
+            sample_rule = recommender.rules.iloc[0]
+            print("Example Rule:")
+            print(f"Antecedents: {set(sample_rule['antecedents'])}")
+            print(f"Consequents: {set(sample_rule['consequents'])}")
+            print(f"Lift: {sample_rule['lift']:.2f}")
+
+        # Check feature coverage
+        print("\nFeature Coverage Check:")
+        for feature in list(test_features)[:3]:
+            print(f"Feature '{feature}' Associated News Count: {len(recommender.feature_index.get(feature, []))}")
+
+    except Exception as e:
+        print(f"Test Failed: {str(e)}")
+
+# Execute tests (first 5 news items)
+for i in range(5):
+    test_recommendation_system(i)
+```
+
+结果
+
+```js
+=== Test News 0 ===
+[COMEDY] funniest tweet cat dog week sept dog dont understa...
+Sentiment Label: sentiment_label    positive
+sentiment_label    positive
+Name: 0, dtype: object
+Entity Count: 0
+
+Recommendation Results:
+1. [PARENTING] funniest tweet parent week sept accidentally put g...
+   Match Score: 0.00
+2. [COMEDY] funniest tweet cat dog week june petition stop rin...
+   Match Score: 0.00
+3. [PARENTING] funniest tweet parent week parenting trying laugh ...
+   Match Score: 0.00
+4. [TRAVEL] lovely honeymoon destination newlywed dont travel ...
+   Match Score: 0.00
+5. [COMEDY] smith super fan scared witless oscar slap snl sket...
+   Match Score: 0.00
+
+=== System Diagnostics ===
+Target News Features: {'sentiment=sentiment_label    positive\nsentiment_label    positive\nName: 0, dtype: object', 'word=funniest', 'word=dont', 'word=sept', 'word=tweet', 'category=COMEDY', 'word=week'}
+
+Valid Rules Count: 9
+Example Rule:
+Antecedents: {'category=POLITICS'}
+Consequents: {'sentiment=negative', 'word=trump'}
+Lift: 2.82
+
+Feature Coverage Check:
+Feature 'sentiment=sentiment_label    positive
+sentiment_label    positive
+Name: 0, dtype: object' Associated News Count: 1
+Feature 'word=funniest' Associated News Count: 12
+Feature 'word=dont' Associated News Count: 7
+
+=== Test News 1 ===
+[PARENTING] funniest tweet parent week sept accidentally put g...
+Sentiment Label: sentiment_label    negative
+sentiment_label    negative
+Name: 1, dtype: object
+Entity Count: 2
+
+Recommendation Results:
+1. [COMEDY] funniest tweet cat dog week sept dog dont understa...
+   Match Score: 0.00
+2. [COMEDY] funniest tweet cat dog week june petition stop rin...
+   Match Score: 0.00
+3. [PARENTING] funniest tweet parent week parenting trying laugh ...
+   Match Score: 0.00
+4. [PARENTING] stop saying breastfeeding free amid formula shorta...
+   Match Score: 0.00
+5. [PARENTS] reason parent thankful teacher...
+   Match Score: 0.00
+
+=== System Diagnostics ===
+Target News Features: {'word=funniest', 'word=sept', 'word=tweet', 'entity=funniest tweet parent', 'entity=grownup toothpaste', 'sentiment=sentiment_label    negative\nsentiment_label    negative\nName: 1, dtype: object', 'word=parent', 'category=PARENTING', 'word=week'}
+
+Valid Rules Count: 9
+Example Rule:
+Antecedents: {'category=POLITICS'}
+Consequents: {'sentiment=negative', 'word=trump'}
+Lift: 2.82
+
+Feature Coverage Check:
+Feature 'word=funniest' Associated News Count: 12
+Feature 'word=sept' Associated News Count: 2
+Feature 'word=tweet' Associated News Count: 13
+
+=== Test News 2 ===
+[SPORTS] maury will shortstop dodger maury will helped los ...
+Sentiment Label: sentiment_label    positive
+sentiment_label    positive
+Name: 2, dtype: object
+Entity Count: 2
+
+Recommendation Results:
+1. [SPORTS] vega ace win first wnba title chelsea gray named m...
+   Match Score: 0.00
+2. [SPORTS] nfl seek arbitration flores racial discrimination ...
+   Match Score: 0.00
+3. [BUSINESS] alaska airline cancel dozen flight pilot picket al...
+   Match Score: 0.00
+4. [SPORTS] boston marathon race inclusive nonbinary runner ra...
+   Match Score: 0.00
+5. [SPORTS] anthony mlb pitcher turned transit cop crash way c...
+   Match Score: 0.00
+
+=== System Diagnostics ===
+Target News Features: {'word=will', 'word=maury', 'entity=los angeles', 'word=shortstop', 'entity=dodger maury', 'category=SPORTS', 'sentiment=sentiment_label    positive\nsentiment_label    positive\nName: 2, dtype: object', 'word=dodger'}
+
+Valid Rules Count: 9
+Example Rule:
+Antecedents: {'category=POLITICS'}
+Consequents: {'sentiment=negative', 'word=trump'}
+Lift: 2.82
+
+Feature Coverage Check:
+Feature 'word=will' Associated News Count: 1
+Feature 'word=maury' Associated News Count: 1
+Feature 'entity=los angeles' Associated News Count: 6
+
+=== Test News 3 ===
+[ENTERTAINMENT] golden globe returning nbc january year past month...
+Sentiment Label: sentiment_label    negative
+sentiment_label    negative
+Name: 3, dtype: object
+Entity Count: 0
+
+Recommendation Results:
+1. [ENTERTAINMENT] serena williams writes powerful essay almost died ...
+   Match Score: 0.00
+2. [ENTERTAINMENT] sean penn tell sean hannity dont trust surreal tal...
+   Match Score: 0.00
+3. [ENTERTAINMENT] hailey bieber shuts pregnancy rumor leave alone mo...
+   Match Score: 0.00
+4. [ENTERTAINMENT] james cameron say clashed studio avatar release av...
+   Match Score: 0.00
+5. [ENTERTAINMENT] paula pattons viral fried chicken recipe get roast...
+   Match Score: 0.00
+
+=== System Diagnostics ===
+Target News Features: {'word=year', 'sentiment=sentiment_label    negative\nsentiment_label    negative\nName: 3, dtype: object', 'word=golden', 'word=january', 'word=returning', 'category=ENTERTAINMENT', 'word=globe'}
+
+Valid Rules Count: 9
+Example Rule:
+Antecedents: {'category=POLITICS'}
+Consequents: {'sentiment=negative', 'word=trump'}
+Lift: 2.82
+
+Feature Coverage Check:
+Feature 'word=year' Associated News Count: 12
+Feature 'sentiment=sentiment_label    negative
+sentiment_label    negative
+Name: 3, dtype: object' Associated News Count: 1
+Feature 'word=golden' Associated News Count: 1
+
+=== Test News 4 ===
+[POLITICS] biden say force defend taiwan china invaded presid...
+Sentiment Label: sentiment_label    positive
+sentiment_label    positive
+Name: 4, dtype: object
+Entity Count: 2
+
+Recommendation Results:
+1. [POLITICS] jan committee obtains email former trump lawyer ju...
+   Match Score: 2.82
+2. [POLITICS] gop rep fred upton voted impeach trump announces r...
+   Match Score: 2.82
+3. [POLITICS] trump tell member gay trump maralago dont look gay...
+   Match Score: 2.82
+4. [POLITICS] trump team propose name arbiter maralago probe jus...
+   Match Score: 2.82
+5. [POLITICS] trump tout massive turnout georgia rally journalis...
+   Match Score: 2.82
+
+=== System Diagnostics ===
+Target News Features: {'entity=china', 'word=taiwan', 'word=biden', 'word=china', 'word=defend', 'word=force', 'entity=taiwan', 'sentiment=sentiment_label    positive\nsentiment_label    positive\nName: 4, dtype: object', 'category=POLITICS'}
+
+Valid Rules Count: 9
+Example Rule:
+Antecedents: {'category=POLITICS'}
+Consequents: {'sentiment=negative', 'word=trump'}
+Lift: 2.82
+
+Feature Coverage Check:
+Feature 'entity=china' Associated News Count: 1
+Feature 'word=taiwan' Associated News Count: 1
+Feature 'word=biden' Associated News Count: 24
+```
