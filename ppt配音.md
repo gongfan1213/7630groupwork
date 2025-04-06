@@ -1,6 +1,3 @@
-明白了！下面是你PPT的英文版定稿演讲稿（Speaker Notes），每一页都配有自然流畅的口语化讲解，你可以直接用来配AI语音：
-
----
 
 ### **Slide 1 – Title**
 **Hi everyone, I’m Fan Gong. I worked on sentiment analysis and association rule mining for this project.**  
